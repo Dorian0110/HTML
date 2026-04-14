@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>环节三：感受模型比对之表情挑战</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #0f172a; color: #f1f5f9; }
+        .hide { display: none !important; }
+        .glass-panel { background: rgba(30, 41, 59, 0.95); border: 1px solid #334155; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
+        @keyframes flashSuccess { 0% { background-color: rgba(34, 197, 94, 0.4); } 100% { background-color: transparent; } }
+        @keyframes flashFail { 0% { background-color: rgba(239, 68, 68, 0.5); } 100% { background-color: transparent; } }
+        .animate-success { animation: flashSuccess 0.4s ease-out; }
+        .animate-fail { animation: flashFail 0.4s ease-out; }
+    </style>
+</head>
+<body class="flex flex-col p-4 md:p-6 font-sans">
+    <header class="mb-4 md:mb-6 shrink-0 flex flex-col items-center justify-center">
+        <h1 class="text-3xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400 flex items-center gap-3 md:gap-4 text-center">
+            <svg class="w-10 h-10 md:w-12 md:h-12 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+            环节三：探究“模型比对” —— 极速表情挑战
+        </h1>
+    </header>
+
+    <div class="flex-1 w-full max-w-[1920px] mx-auto flex flex-col md:flex-row gap-4 md:gap-6 min-h-0">
+        <div class="w-full md:w-[60%] glass-panel p-3 md:p-4 rounded-2xl md:rounded-3xl flex flex-col relative overflow-hidden min-h-[40vh] md:min-h-0">
+            <div id="flashOverlay" class="absolute inset-0 z-20 pointer-events-none"></div>
+            <div class="relative bg-black rounded-xl md:rounded-2xl overflow-hidden flex-1 flex items-center justify-center border-4 border-slate-900 shadow-inner">
+                <!-- 兼容平板的 video 标签 -->
+                <video id="videoElement" autoplay playsinline webkit-playsinline="true" x5-playsinline="true" muted class="absolute inset-0 w-full h-full object-cover transform -scale-x-100 opacity-30"></video>
+                <canvas id="canvasElement" class="absolute inset-0 w-full h-full object-cover"></canvas>
+                
+                <div id="loadingOverlay" class="absolute inset-0 flex flex-col items-center justify-center text-white bg-slate-900/80 backdrop-blur z-10 p-4 text-center">
+                    <h3 class="text-2xl md:text-3xl font-bold mb-3 text-emerald-200">加载 AI 面部深度网络...</h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="w-full md:w-[40%] glass-panel rounded-2xl md:rounded-3xl p-4 md:p-8 flex flex-col relative overflow-hidden">
+            <div id="gameIdle" class="flex-1 flex flex-col items-center justify-center text-center">
+                <div class="w-full flex justify-center mb-4 md:mb-8 h-32 md:h-40">
+                     <div id="idleResultBox" class="hide w-32 h-32 md:w-40 md:h-40 rounded-[2rem] flex flex-col items-center justify-center shadow-lg border-2 border-emerald-600 bg-emerald-900/40">
+                        <span id="idleIcon" class="text-6xl md:text-7xl mb-2"></span>
+                        <span id="idleName" class="text-xl md:text-2xl font-bold text-slate-200"></span>
+                     </div>
+                     <div id="idleWaitBox" class="w-full h-full flex flex-col items-center justify-center text-slate-500 text-sm md:text-xl p-2">
+                        <span>做个鬼脸！看看这本超级“模型字典”能否认出你？<br><br>等待识别...</span>
+                     </div>
+                </div>
+                <h2 class="text-2xl md:text-4xl font-bold mb-4 md:mb-6">见证恐怖算力！</h2>
+                <button onclick="startGame()" class="px-8 py-4 md:px-12 md:py-6 rounded-full font-bold text-xl md:text-2xl flex items-center gap-3 md:gap-4 bg-emerald-600 hover:bg-emerald-500 text-white shadow-2xl transition-transform hover:scale-105">开启极限变脸</button>
+            </div>
+
+            <div id="gamePlaying" class="hide flex-1 flex flex-col items-center justify-between py-2 md:py-4">
+                <div class="w-full flex justify-between items-end px-2 md:px-4">
+                    <div class="flex flex-col"><span class="text-[10px] md:text-sm text-slate-400 font-bold mb-1">SCORE</span><div class="text-3xl md:text-5xl font-black text-white font-mono"><span id="scoreText">0</span><span class="text-xl md:text-3xl text-slate-600">/10</span></div></div>
+                    <div class="flex flex-col items-center"><span class="text-[10px] md:text-sm text-slate-400 font-bold mb-1">TIME</span><div id="liveTimer" class="text-2xl md:text-3xl font-black text-emerald-400 font-mono">0.0s</div></div>
+                    <div class="text-right flex flex-col items-end"><span class="text-[10px] md:text-sm text-slate-400 font-bold mb-2">LEVEL</span><div id="levelBadge" class="text-sm md:text-xl font-bold px-2 py-1 md:px-4 md:py-2 rounded-lg md:rounded-xl mt-1 bg-emerald-500 text-white">基础模式</div></div>
+                </div>
+
+                <div class="flex flex-col items-center justify-center flex-1 w-full my-4 md:my-6">
+                    <div class="relative">
+                        <div class="absolute inset-0 blur-2xl md:blur-3xl opacity-30 rounded-full bg-emerald-500"></div>
+                        <div class="w-48 h-48 md:w-64 md:h-64 rounded-[2rem] md:rounded-[3rem] flex flex-col items-center justify-center shadow-2xl relative border-4 bg-gradient-to-br from-emerald-900 to-slate-900 border-emerald-500/50">
+                            <span id="targetIcon" class="text-6xl md:text-8xl mb-2 md:mb-4 filter drop-shadow-2xl scale-125"></span>
+                            <span id="targetName" class="text-2xl md:text-3xl font-bold text-white tracking-widest mt-2 md:mt-4"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="w-full px-2 md:px-4 shrink-0">
+                    <div class="flex justify-between text-sm md:text-lg font-bold text-slate-400 mb-2 md:mb-3"><span>倒计时</span><span>快点！</span></div>
+                    <div class="h-4 md:h-6 w-full bg-slate-950 rounded-full overflow-hidden border-2 border-slate-700"><div id="progressBar" class="h-full rounded-full bg-emerald-500" style="width: 100%;"></div></div>
+                </div>
+            </div>
+
+            <div id="gameEnd" class="hide flex-1 flex flex-col items-center justify-center text-center">
+                <h2 id="endTitle" class="text-3xl md:text-4xl font-black mb-4"></h2>
+                <div id="finalTimeBox" class="hide mb-4 md:mb-6"><span class="text-slate-400 text-xl md:text-2xl mr-2">总用时:</span><span id="finalTimeText" class="text-4xl md:text-5xl font-black text-emerald-400 font-mono">0.00</span><span class="text-slate-400 text-xl md:text-2xl ml-1">秒</span></div>
+                <p id="endDesc" class="text-slate-400 mb-8 md:mb-10 text-lg md:text-xl"></p>
+                <button onclick="switchTab()" class="px-8 py-3 md:px-10 md:py-5 rounded-full font-bold text-xl md:text-2xl bg-slate-700 hover:bg-slate-600 text-white shadow-lg">重新挑战</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // 兼容性绝对路径导入
+        import { FilesetResolver, FaceLandmarker } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs';
+
+        const State = { gameState: 'idle', score: 0, targetId: '', timeLimit: 5000, endTime: 0, matchStartTime: 0, gameStartTime: 0, lastIdleResult: null, clearId: null };
+        const FACES = [{ id: 'smile', name: '大笑', icon: '😄' }, { id: 'surprise', name: '惊讶', icon: '😮' }, { id: 'pout', name: '嘟嘴', icon: '😙' }, { id: 'blink', name: '闭眼', icon: '😑' }];
+        
+        const video = document.getElementById('videoElement'), canvas = document.getElementById('canvasElement'), ctx = canvas.getContext('2d');
+        let faceLand = null;
+
+        window.switchTab = () => { State.gameState = 'idle'; State.lastIdleResult = null; updateUI(); hideIdleResult(); };
+        window.startGame = () => { State.gameState = 'playing'; State.score = 0; State.gameStartTime = Date.now(); nextRound(0); updateUI(); };
+
+        function updateUI() {
+            ['gameIdle', 'gamePlaying', 'gameEnd'].forEach(id => document.getElementById(id).classList.add('hide'));
+            if(State.gameState==='idle') document.getElementById('gameIdle').classList.remove('hide');
+            else if(State.gameState==='playing') document.getElementById('gamePlaying').classList.remove('hide');
+            else document.getElementById('gameEnd').classList.remove('hide');
+        }
+
+        function nextRound(score) {
+            State.timeLimit = Math.max(1000, 5000 - (score * 450));
+            let t = FACES[Math.floor(Math.random() * FACES.length)];
+            if(FACES.length>1 && t.id===State.targetId) t = FACES.find(x=>x.id!==t.id)||t;
+            State.targetId = t.id; State.endTime = Date.now() + State.timeLimit; State.matchStartTime = 0;
+            
+            document.getElementById('scoreText').innerText = score;
+            document.getElementById('targetIcon').innerText = t.icon; document.getElementById('targetName').innerText = t.name;
+            const b = document.getElementById('levelBadge');
+            if (score > 8) { b.innerText = '⚡闪电'; b.className = "text-sm md:text-xl font-bold px-2 py-1 md:px-4 md:py-2 rounded-lg md:rounded-xl mt-1 bg-purple-500 text-white"; }
+            else if (score > 5) { b.innerText = '🔥极速'; b.className = "text-sm md:text-xl font-bold px-2 py-1 md:px-4 md:py-2 rounded-lg md:rounded-xl mt-1 bg-red-500 text-white"; }
+            else { b.innerText = '🌱基础'; b.className = "text-sm md:text-xl font-bold px-2 py-1 md:px-4 md:py-2 rounded-lg md:rounded-xl mt-1 bg-emerald-500 text-white"; }
+        }
+
+        function triggerFlash(t) {
+            const ov = document.getElementById('flashOverlay'); ov.className = `absolute inset-0 z-20 pointer-events-none animate-${t}`;
+            setTimeout(() => ov.className = "absolute inset-0 z-20 pointer-events-none", 400);
+        }
+
+        function endGame(won) {
+            State.gameState = won ? 'won' : 'lost'; updateUI(); triggerFlash(won?'success':'fail');
+            document.getElementById('endTitle').innerText = won ? "挑战大成功！" : "挑战失败";
+            document.getElementById('endTitle').className = `text-3xl md:text-4xl font-black mb-4 ${won?'text-yellow-400':'text-red-400'}`;
+            if(won) {
+                document.getElementById('finalTimeBox').classList.remove('hide');
+                document.getElementById('finalTimeText').innerText = ((Date.now() - State.gameStartTime)/1000).toFixed(2);
+                document.getElementById('endDesc').innerText = "计算机的处理速度震惊全场！";
+            } else {
+                document.getElementById('finalTimeBox').classList.add('hide');
+                document.getElementById('endDesc').innerText = `最终得分：${State.score}`;
+            }
+        }
+
+        function updateIdle(rid) {
+            if(!rid) return;
+            if(State.lastIdleResult !== rid) {
+                State.lastIdleResult = rid;
+                const it = FACES.find(x=>x.id===rid);
+                if(it) {
+                    document.getElementById('idleWaitBox').classList.add('hide');
+                    const rb = document.getElementById('idleResultBox'); rb.classList.remove('hide');
+                    document.getElementById('idleIcon').innerText = it.icon; document.getElementById('idleName').innerText = it.name;
+                }
+            }
+            if(State.clearId) clearTimeout(State.clearId);
+            State.clearId = setTimeout(hideIdleResult, 1000);
+        }
+        function hideIdleResult() { State.lastIdleResult=null; document.getElementById('idleWaitBox').classList.remove('hide'); document.getElementById('idleResultBox').classList.add('hide'); }
+
+        async function init() {
+            try {
+                let stream;
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 } } });
+                } catch(e) {
+                    stream = await navigator.mediaDevices.getUserMedia({ video: true }); 
+                }
+                video.srcObject = stream;
+                video.onloadedmetadata = () => { video.play(); renderLoop(); };
+                
+                const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
+                faceLand = await FaceLandmarker.createFromOptions(vision, {
+                    baseOptions: { modelAssetBuffer: new Uint8Array(await (await fetch("https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task")).arrayBuffer()), delegate: "GPU" }, outputFaceBlendshapes: true, runningMode: "VIDEO", numFaces: 1
+                });
+                document.getElementById('loadingOverlay').classList.add('hide'); video.classList.remove('opacity-30');
+            } catch(e) { alert("加载失败。请确保设备有摄像头并在 HTTPS/localhost 环境下运行。"); }
+        }
+
+        function renderLoop() {
+            if (video.readyState >= 2 && faceLand) {
+                canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                const now = Date.now();
+
+                if (State.gameState === 'playing') {
+                    document.getElementById('liveTimer').innerText = ((now - State.gameStartTime)/1000).toFixed(1)+'s';
+                    const left = State.endTime - now;
+                    if (left <= 0) endGame(false);
+                    else {
+                        const pct = Math.max(0, (left/State.timeLimit)*100);
+                        const b = document.getElementById('progressBar'); b.style.width = pct+'%';
+                        b.style.backgroundColor = pct<30?'#ef4444':pct<60?'#f59e0b':'#10b981';
+                    }
+                }
+
+                ctx.save(); ctx.translate(canvas.width, 0); ctx.scale(-1, 1);
+                let recId = null;
+
+                const res = faceLand.detectForVideo(video, now);
+                if (res.faceLandmarks && res.faceLandmarks.length > 0) {
+                    const marks = res.faceLandmarks[0];
+                    const blends = res.faceBlendshapes[0]?.categories;
+                    
+                    ctx.fillStyle = 'rgba(16,185,129,0.8)';
+                    for(let i=0; i<marks.length; i+=4) { ctx.beginPath(); ctx.arc(marks[i].x*canvas.width, marks[i].y*canvas.height, 2.5, 0, 2*Math.PI); ctx.fill(); }
+
+                    if (blends) {
+                        const smile = (blends.find(b=>b.categoryName==='mouthSmileLeft')?.score||0) + (blends.find(b=>b.categoryName==='mouthSmileRight')?.score||0);
+                        const jaw = blends.find(b=>b.categoryName==='jawOpen')?.score||0;
+                        const pout = blends.find(b=>b.categoryName==='mouthPucker')?.score||0;
+                        const blink = (blends.find(b=>b.categoryName==='eyeBlinkLeft')?.score||0) + (blends.find(b=>b.categoryName==='eyeBlinkRight')?.score||0);
+
+                        if (smile > 0.7) recId = 'smile';
+                        else if (jaw > 0.3) recId = 'surprise';
+                        else if (pout > 0.35) recId = 'pout';
+                        else if (blink > 0.4) recId = 'blink';
+                    }
+                }
+
+                if (State.gameState === 'idle') updateIdle(recId);
+                else if (State.gameState === 'playing' && recId) {
+                    if (recId === State.targetId) {
+                        const hold = State.timeLimit < 2000 ? 100 : 200;
+                        if (!State.matchStartTime) State.matchStartTime = now;
+                        else if (now - State.matchStartTime > hold) {
+                            triggerFlash('success'); State.score++;
+                            if (State.score >= 10) endGame(true); else nextRound(State.score);
+                        }
+                    } else State.matchStartTime = 0;
+                } else State.matchStartTime = 0;
+
+                ctx.restore();
+            }
+            requestAnimationFrame(renderLoop);
+        }
+        const originalLog = console.log; console.log = (...args) => { if(typeof args[0]==='string' && args[0].includes('INFO:')) return; originalLog.apply(console, args); };
+        init();
+    </script>
+</body>
+</html>
+
+
+```
