@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>环节一：人脸门禁与白名单库体验</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #0f172a; color: #f1f5f9; }
+        .hide { display: none !important; }
+        .glass-panel { background: rgba(30, 41, 59, 0.95); border: 1px solid #334155; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
+        .btn-enroll { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+        .btn-verify { background: linear-gradient(135deg, #10b981, #059669); }
+    </style>
+</head>
+<body class="flex flex-col p-4 md:p-6 font-sans">
+    <header class="mb-4 md:mb-6 shrink-0 flex flex-col items-center justify-center">
+        <h1 class="text-3xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-400 flex items-center gap-3">
+            <svg class="w-10 h-10 md:w-12 md:h-12 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c0 3.517-1.009 6.799-2.753 9.571m-3.44-2.04l.054-.09A13.916 13.916 0 008 11a4 4 0 118 0c0 1.017-.07 2.019-.203 3m-2.118 6.844A21.88 21.88 0 0015.171 17m3.839 1.132c.645-2.266.99-4.659.99-7.132A8 8 0 008 4.07M3 15.364c.64-1.319 1-2.8 1-4.364 0-1.457.39-2.823 1.07-4"></path></svg>
+            环节一：人脸门禁数据库体验
+        </h1>
+    </header>
+
+    <div class="flex-1 w-full max-w-[1600px] mx-auto flex flex-col md:flex-row gap-4 min-h-0">
+        <!-- 监控区 -->
+        <div class="w-full md:w-[60%] lg:w-[65%] glass-panel rounded-2xl p-3 flex flex-col relative overflow-hidden min-h-[40vh]">
+            <div class="relative bg-black rounded-xl overflow-hidden flex-1 flex items-center justify-center border-4 border-slate-900">
+                <!-- 修复1：去除了 opacity 透明度限制，画面恢复 100% 亮度 -->
+                <video id="videoElement" autoplay playsinline webkit-playsinline="true" x5-playsinline="true" muted class="absolute inset-0 w-full h-full object-cover transform -scale-x-100"></video>
+                <canvas id="canvasElement" class="absolute inset-0 w-full h-full object-cover z-10"></canvas>
+                
+                <!-- 加载状态与报错层 -->
+                <div id="loadingOverlay" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/90 backdrop-blur z-20 p-6 text-center">
+                    <svg id="loadingSpinner" class="animate-spin h-12 w-12 text-blue-400 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    <h3 id="loadingText" class="text-2xl font-bold text-white">正在唤醒摄像头与 AI 引擎...</h3>
+                    <p id="loadingDesc" class="text-slate-400 mt-2 text-sm">若长时间卡住，请检查是否已点击【允许】摄像头权限</p>
+                </div>
+                
+                <div id="scanBox" class="hide absolute inset-0 border-[6px] border-blue-500/50 pointer-events-none transition-all z-30">
+                    <div class="absolute inset-0 bg-blue-500/20 animate-pulse"></div>
+                    <div id="scanText" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-2xl md:text-4xl font-bold text-white drop-shadow-lg z-40 whitespace-nowrap">提取特征中...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 控制台 -->
+        <div class="w-full md:w-[40%] lg:w-[35%] glass-panel rounded-2xl p-4 flex flex-col">
+            <h2 class="text-2xl font-bold mb-4 border-b border-slate-700 pb-2">门禁控制台</h2>
+            <div class="flex-1 flex flex-col gap-4">
+                <div class="bg-slate-900/50 p-4 rounded-xl border border-slate-700">
+                    <h3 class="text-lg font-bold text-blue-400 mb-2">1. 建立白名单</h3>
+                    <div class="grid grid-cols-3 gap-2 mb-4">
+                        <button onclick="enrollFace(1, '爸爸')" class="py-2 rounded-lg text-white text-sm btn-enroll font-bold shadow-md">👨 录入爸爸</button>
+                        <button onclick="enrollFace(2, '妈妈')" class="py-2 rounded-lg text-white text-sm btn-enroll font-bold shadow-md">👩 录入妈妈</button>
+                        <button onclick="enrollFace(3, '宝宝')" class="py-2 rounded-lg text-white text-sm btn-enroll font-bold shadow-md">👶 录入宝宝</button>
+                    </div>
+                    <div class="bg-black/40 rounded-lg p-2 min-h-[60px] text-sm">
+                        <div id="enrolledList" class="flex flex-col gap-1"></div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900/50 p-4 rounded-xl border border-slate-700 flex-1 flex flex-col justify-center">
+                    <h3 class="text-lg font-bold text-emerald-400 mb-2">2. 验证开门</h3>
+                    <button id="btnVerify" onclick="verifyFace()" disabled class="w-full py-4 rounded-xl font-bold text-xl text-white bg-slate-700 cursor-not-allowed">开始身份验证</button>
+                </div>
+            </div>
+
+            <!-- 结果弹窗 -->
+            <div id="resultModal" class="hide absolute inset-0 bg-slate-900/95 z-50 flex flex-col items-center justify-center p-6 text-center rounded-2xl">
+                <div id="resultIcon" class="text-6xl mb-4"></div>
+                <h2 id="resultTitle" class="text-3xl font-black mb-2"></h2>
+                <div class="bg-black/50 border border-slate-700 rounded p-3 mb-4 text-left w-full max-w-xs">
+                    <div class="text-xs text-slate-500 mb-1">判定数据 (阈值0.05)</div>
+                    <div id="diffScoreDisplay" class="font-mono text-lg text-blue-400"></div>
+                </div>
+                <p id="resultDesc" class="text-lg text-slate-300 mb-6"></p>
+                <button onclick="closeModal()" class="px-8 py-2 rounded-full font-bold text-lg bg-slate-700 text-white">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { FilesetResolver, FaceLandmarker } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs';
+
+        const video = document.getElementById('videoElement'), canvas = document.getElementById('canvasElement'), ctx = canvas.getContext('2d');
+        let faceLandmarker = null, enrolledFacesDB = {};
+
+        // 修复2：网络穿透代理下载模型
+        async function fetchModelBuffer(url) {
+            try {
+                // 优先尝试代理加速节点 (防止被墙)
+                const resProxy = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
+                if(resProxy.ok) return new Uint8Array(await resProxy.arrayBuffer());
+            } catch(e) {}
+            // 如果代理失败，尝试直连
+            const resDirect = await fetch(url);
+            return new Uint8Array(await resDirect.arrayBuffer());
+        }
+
+        function showError(msg) {
+            document.getElementById('loadingSpinner').classList.add('hide');
+            const txt = document.getElementById('loadingText');
+            txt.innerText = msg; txt.classList.replace('text-white', 'text-red-400');
+            document.getElementById('loadingDesc').innerText = "提示：请确保已允许浏览器调用摄像头，或检查网络是否正常。";
+        }
+
+        async function init() {
+            try {
+                // 1. 唤醒摄像头
+                let stream;
+                try { stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 } }); } 
+                catch(e) { stream = await navigator.mediaDevices.getUserMedia({ video: true }); }
+                video.srcObject = stream;
+                
+                // 2. 加载 AI 模型
+                document.getElementById('loadingText').innerText = "摄像头开启成功，正在下载 AI 引擎(可能需要几秒钟)...";
+                const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
+                
+                const modelUrl = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+                const modelBuffer = await fetchModelBuffer(modelUrl);
+
+                faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+                    baseOptions: { modelAssetBuffer: modelBuffer, delegate: "GPU" },
+                    runningMode: "VIDEO", numFaces: 1
+                });
+
+                document.getElementById('loadingOverlay').classList.add('hide');
+                renderLoop();
+            } catch(e) { 
+                console.error(e);
+                showError("初始化失败：摄像头被拦截或网络连接超时"); 
+            }
+        }
+
+        let currentFaceLandmarks = null;
+        function renderLoop() {
+            if (video.readyState >= 2 && faceLandmarker) {
+                canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.save(); ctx.translate(canvas.width, 0); ctx.scale(-1, 1);
+
+                const res = faceLandmarker.detectForVideo(video, Date.now());
+                if (res.faceLandmarks && res.faceLandmarks.length > 0) {
+                    currentFaceLandmarks = res.faceLandmarks[0];
+                    ctx.strokeStyle = 'rgba(16, 185, 129, 0.8)'; ctx.lineWidth = 2;
+                    let minX = 1, minY = 1, maxX = 0, maxY = 0;
+                    currentFaceLandmarks.forEach(p => { minX = Math.min(minX, p.x); minY = Math.min(minY, p.y); maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y); });
+                    const bx = minX * canvas.width - 20, by = minY * canvas.height - 20, bw = (maxX - minX) * canvas.width + 40, bh = (maxY - minY) * canvas.height + 40;
+                    ctx.strokeRect(bx, by, bw, bh);
+                } else { currentFaceLandmarks = null; }
+                ctx.restore();
+            }
+            requestAnimationFrame(renderLoop);
+        }
+
+        function extractFeatures(marks) {
+            const dist = (p1, p2) => Math.hypot(marks[p1].x - marks[p2].x, marks[p1].y - marks[p2].y);
+            return [dist(33, 263)/dist(234, 454), dist(61, 291)/dist(234, 454), dist(168, 1)/dist(10, 152), dist(234, 454)/dist(10, 152)];
+        }
+        function calcDiff(fA, fB) { let d=0; for(let i=0;i<fA.length;i++) d+=Math.abs(fA[i]-fB[i]); return d; }
+
+        window.enrollFace = (userId, roleName) => {
+            if (!currentFaceLandmarks) { alert("请正对摄像头！"); return; }
+            const box = document.getElementById('scanBox');
+            document.getElementById('scanText').innerText = `正在提取 ${roleName} 特征...`;
+            box.classList.remove('hide');
+            setTimeout(() => {
+                enrolledFacesDB[userId] = { name: roleName, features: extractFeatures(currentFaceLandmarks) };
+                box.classList.add('hide');
+                
+                const list = document.getElementById('enrolledList');
+                list.innerHTML = Object.values(enrolledFacesDB).map(u => `<div class="bg-slate-800 p-1 px-2 rounded flex justify-between"><span class="text-green-400 font-bold">${u.name}</span><span class="text-xs text-slate-500">已录入</span></div>`).join('');
+                
+                const btn = document.getElementById('btnVerify');
+                btn.disabled = false; btn.className = "w-full py-4 rounded-xl font-bold text-xl text-white btn-verify shadow-xl";
+            }, 1000); 
+        };
+
+        window.verifyFace = () => {
+            if (Object.keys(enrolledFacesDB).length === 0 || !currentFaceLandmarks) { alert("请确保已录入且人在镜头前"); return; }
+            const box = document.getElementById('scanBox');
+            document.getElementById('scanText').innerText = "比对数据库...";
+            box.classList.remove('hide');
+            setTimeout(() => {
+                box.classList.add('hide');
+                const currentData = extractFeatures(currentFaceLandmarks);
+                let matchedUser = null, minDiff = 0.05, actualDiff = 999;
+                for (let id in enrolledFacesDB) {
+                    const diff = calcDiff(currentData, enrolledFacesDB[id].features);
+                    if (diff < actualDiff) actualDiff = diff;
+                    if (diff < minDiff) { matchedUser = enrolledFacesDB[id]; minDiff = diff; }
+                }
+                
+                const ds = document.getElementById('diffScoreDisplay');
+                ds.innerText = `差异度: ${actualDiff.toFixed(3)}`;
+                ds.className = `font-mono text-lg ${matchedUser ? 'text-green-400' : 'text-red-400'}`;
+                
+                if (matchedUser) showResult(true, "验证成功！", `匹配：【${matchedUser.name}】\n门锁已开启！`);
+                else showResult(false, "验证失败！", "判定：陌生人\n查无此人，拒绝开门！");
+            }, 1000);
+        };
+
+        function showResult(success, title, desc) {
+            const m = document.getElementById('resultModal');
+            document.getElementById('resultIcon').innerText = success ? '✅' : '🚫';
+            document.getElementById('resultTitle').innerText = title;
+            document.getElementById('resultTitle').className = `text-3xl font-black mb-2 ${success?'text-green-400':'text-red-400'}`;
+            document.getElementById('resultDesc').innerText = desc;
+            m.classList.remove('hide');
+        }
+        window.closeModal = () => document.getElementById('resultModal').classList.add('hide');
+        init();
+    </script>
+</body>
+</html>
+
+
+```
