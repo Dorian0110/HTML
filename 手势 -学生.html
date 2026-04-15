@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>环节三：化无形为有形 - 手势特征提取</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 引入国内加速节点 -->
+    <script src="https://npm.elemecdn.com/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://npm.elemecdn.com/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://npm.elemecdn.com/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #0f172a; color: #f1f5f9; }
+        .glass-panel { background: rgba(30, 41, 59, 0.95); border: 1px solid #334155; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
+        .data-stream { font-family: monospace; color: #38bdf8; overflow: hidden; }
+    </style>
+</head>
+<body class="flex flex-col p-4 md:p-6 font-sans">
+    <header class="mb-4 md:mb-6 shrink-0 flex flex-col items-center justify-center">
+        <h1 class="text-3xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400 flex items-center gap-3 md:gap-4 text-center">
+            <svg class="w-10 h-10 md:w-12 md:h-12 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 113 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11"></path></svg>
+            探究“提取特征与比对” —— 手势识别
+        </h1>
+        <p class="text-slate-400 mt-2 text-lg">将真实的物体转化为数字坐标，并在模型字典中寻找匹配</p>
+    </header>
+
+    <div class="flex-1 w-full max-w-[1600px] mx-auto flex flex-col md:flex-row gap-4 md:gap-6 min-h-0">
+        <!-- 左侧：摄像头与特征可视化 -->
+        <div class="w-full md:w-[60%] lg:w-[65%] glass-panel p-3 md:p-4 rounded-2xl md:rounded-3xl flex flex-col relative overflow-hidden min-h-[40vh] md:min-h-0">
+            <div class="relative bg-black rounded-xl md:rounded-2xl overflow-hidden flex-1 flex items-center justify-center border-4 border-slate-900 shadow-inner">
+                <video id="videoElement" autoplay playsinline muted class="absolute inset-0 w-full h-full object-cover transform -scale-x-100 opacity-40"></video>
+                <canvas id="canvasElement" class="absolute inset-0 w-full h-full object-cover"></canvas>
+                
+                <div id="loadingOverlay" class="absolute inset-0 flex flex-col items-center justify-center text-white bg-slate-900/80 backdrop-blur z-10 p-4 text-center transition-opacity duration-500">
+                    <svg class="animate-spin -ml-1 mr-3 h-10 w-10 text-blue-500 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    <h3 class="text-2xl font-bold text-blue-200">正在启动 AI 视觉模型...</h3>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧：实时分析控制台 -->
+        <div class="w-full md:w-[40%] lg:w-[35%] glass-panel rounded-2xl md:rounded-3xl p-6 flex flex-col relative overflow-hidden">
+            <h2 class="text-2xl font-bold text-white mb-6 border-b border-slate-700 pb-4">实时 AI 分析控制台</h2>
+            
+            <!-- 第二步：提取特征 -->
+            <div class="bg-slate-800/80 rounded-xl p-5 mb-6 border border-blue-500/30">
+                <div class="flex items-center gap-3 mb-3">
+                    <span class="bg-blue-500 text-white font-bold w-8 h-8 rounded-full flex items-center justify-center">2</span>
+                    <h3 class="text-xl font-bold text-blue-400">提取特征</h3>
+                </div>
+                <p class="text-sm text-slate-400 mb-3">计算机检测到了 <span id="nodeCount" class="text-white font-bold text-lg">0</span> 个数字坐标节点</p>
+                <div class="h-20 bg-slate-950 rounded-lg p-3 data-stream text-xs relative">
+                    <div id="dataStreamBox">等待特征输入...</div>
+                    <div class="absolute bottom-0 left-0 w-full h-8 bg-gradient-to-t from-slate-950 to-transparent"></div>
+                </div>
+            </div>
+
+            <!-- 第三步：比对识别 -->
+            <div class="bg-slate-800/80 rounded-xl p-5 flex-1 flex flex-col border border-cyan-500/30">
+                <div class="flex items-center gap-3 mb-3">
+                    <span class="bg-cyan-500 text-white font-bold w-8 h-8 rounded-full flex items-center justify-center">3</span>
+                    <h3 class="text-xl font-bold text-cyan-400">比对识别 (模型字典匹配)</h3>
+                </div>
+                <p class="text-sm text-slate-400 mb-4">根据坐标特征位移计算，AI 判定当前手势为：</p>
+                
+                <div class="flex-1 flex flex-col items-center justify-center bg-slate-900 rounded-xl border-2 border-slate-700 relative overflow-hidden">
+                    <div id="resultIcon" class="text-8xl mb-2 transition-transform duration-300">❓</div>
+                    <div id="resultName" class="text-3xl font-black text-white tracking-widest">等待识别</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('videoElement');
+        const canvas = document.getElementById('canvasElement');
+        const ctx = canvas.getContext('2d');
+        let hands = null;
+
+        async function init() {
+            try {
+                let stream;
+                try { stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" } }); }
+                catch(e) { stream = await navigator.mediaDevices.getUserMedia({ video: true }); }
+                video.srcObject = stream;
+                video.onloadedmetadata = () => { video.play(); processVideo(); };
+                
+                hands = new Hands({locateFile: (file) => `https://npm.elemecdn.com/@mediapipe/hands/${file}`});
+                hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+                hands.onResults(onResults);
+                document.getElementById('loadingOverlay').style.opacity = '0';
+                setTimeout(() => document.getElementById('loadingOverlay').style.display = 'none', 500);
+            } catch(e) { alert("摄像头加载失败。请确保设备有摄像头并在 HTTPS 环境下运行。"); }
+        }
+
+        async function processVideo() {
+            if (video.readyState >= 2 && hands) await hands.send({image: video});
+            requestAnimationFrame(processVideo);
+        }
+
+        function onResults(res) {
+            canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save(); ctx.translate(canvas.width, 0); ctx.scale(-1, 1);
+
+            let recId = "未识别";
+            let recIcon = "❓";
+            let nodeData = "等待特征输入...";
+            let nodeCount = 0;
+
+            if (res.multiHandLandmarks && res.multiHandLandmarks.length > 0) {
+                const marks = res.multiHandLandmarks[0];
+                nodeCount = 21;
+                
+                // 绘制骨骼
+                ctx.strokeStyle = 'rgba(56,189,248,0.8)'; ctx.lineWidth = 3;
+                const conns = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+                ctx.beginPath(); conns.forEach(([p1,p2]) => { ctx.moveTo(marks[p1].x*canvas.width, marks[p1].y*canvas.height); ctx.lineTo(marks[p2].x*canvas.width, marks[p2].y*canvas.height); }); ctx.stroke();
+                ctx.fillStyle = '#0ea5e9'; marks.forEach(p => { ctx.beginPath(); ctx.arc(p.x*canvas.width, p.y*canvas.height, 6, 0, 2*Math.PI); ctx.fill(); });
+
+                // 模拟特征数据流
+                nodeData = `[Hand Node 0]: X:${marks[0].x.toFixed(2)} Y:${marks[0].y.toFixed(2)}<br>
+                            [Hand Node 8]: X:${marks[8].x.toFixed(2)} Y:${marks[8].y.toFixed(2)}<br>
+                            [Hand Node 12]: X:${marks[12].x.toFixed(2)} Y:${marks[12].y.toFixed(2)}<br>
+                            -> 计算相对距离中...`;
+
+                // 逻辑判定：提取特征后的比对
+                const isIndexOpen = marks[8].y < marks[6].y;
+                const isMiddleOpen = marks[12].y < marks[10].y;
+                const isRingOpen = marks[16].y < marks[14].y;
+                const isPinkyOpen = marks[20].y < marks[18].y;
+
+                if (!isIndexOpen && !isMiddleOpen && !isRingOpen && !isPinkyOpen) { recId = "石头"; recIcon = "✊"; }
+                else if (isIndexOpen && isMiddleOpen && !isRingOpen && !isPinkyOpen) { recId = "剪刀"; recIcon = "✌️"; }
+                else if (isIndexOpen && isMiddleOpen && isRingOpen && isPinkyOpen) { recId = "布"; recIcon = "✋"; }
+            }
+
+            // 更新 UI 控制台
+            document.getElementById('nodeCount').innerText = nodeCount;
+            document.getElementById('dataStreamBox').innerHTML = nodeData;
+            
+            const iconEl = document.getElementById('resultIcon');
+            const nameEl = document.getElementById('resultName');
+            
+            if (nameEl.innerText !== recId) {
+                iconEl.innerText = recIcon;
+                nameEl.innerText = recId;
+                if(recId !== "未识别") {
+                    nameEl.className = "text-4xl font-black text-cyan-400 tracking-widest";
+                    iconEl.classList.add('scale-125');
+                    setTimeout(() => iconEl.classList.remove('scale-125'), 200);
+                } else {
+                    nameEl.className = "text-3xl font-black text-white tracking-widest opacity-50";
+                }
+            }
+
+            ctx.restore();
+        }
+
+        init();
+    </script>
+</body>
+</html>
